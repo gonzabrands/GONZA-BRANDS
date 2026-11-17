@@ -11,7 +11,7 @@ export default async function Join({ searchParams }: { searchParams: Promise<{ r
   const initialRole = params.role === "designer" || params.role === "business" ? params.role : null;
   const user = await getSignedInUser();
   if (user) {
-    const account = await getDb().execute({ sql: "SELECT id FROM users WHERE id = ?", args: [user.userId] });
+    const account = await getDb().query("SELECT id FROM users WHERE id = $1", [user.userId]);
     if (account.rows.length) redirect("/");
   }
   return <JoinForm initialRole={initialRole} signedIn={!!user} suggestedName={user?.fullName ?? ""}

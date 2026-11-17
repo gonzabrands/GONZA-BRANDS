@@ -7,10 +7,10 @@ export async function getSignedInUser() {
   const account = session?.user;
   if (!account?.id || !account.email) return null;
 
-  const { rows } = await getDb().execute({
-    sql: "SELECT user_id FROM legacy_google_accounts WHERE account_id = ?",
-    args: [account.id],
-  });
+  const { rows } = await getDb().query<{ user_id: string }>(
+    "SELECT user_id FROM legacy_google_accounts WHERE account_id = $1",
+    [account.id],
+  );
   const legacyId = rows[0]?.user_id;
 
   return {

@@ -9,11 +9,9 @@ declare module "next-auth" {
 }
 
 export function signInAvailable() {
-  const databaseUrl = process.env.TURSO_DATABASE_URL;
   return Boolean(
     process.env.AUTH_SECRET && process.env.AUTH_GOOGLE_ID &&
-    process.env.AUTH_GOOGLE_SECRET && databaseUrl &&
-    (databaseUrl.startsWith("file:") ? !process.env.VERCEL : process.env.TURSO_AUTH_TOKEN),
+    process.env.AUTH_GOOGLE_SECRET && process.env.DATABASE_URL,
   );
 }
 

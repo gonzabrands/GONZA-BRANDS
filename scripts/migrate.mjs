@@ -1,14 +1,15 @@
-import { createClient } from "@libsql/client";
-import { drizzle } from "drizzle-orm/libsql";
-import { migrate } from "drizzle-orm/libsql/migrator";
+import { Client } from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
 
-const url = process.env.TURSO_DATABASE_URL;
-if (!url) throw new Error("Set TURSO_DATABASE_URL before running migrations.");
+const connectionString = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
+if (!connectionString) throw new Error("Set DATABASE_URL before running migrations.");
 
-const client = createClient({ url, authToken: process.env.TURSO_AUTH_TOKEN });
+const client = new Client({ connectionString, enableChannelBinding: true, connectionTimeoutMillis: 10_000 });
 try {
+  await client.connect();
   await migrate(drizzle(client), { migrationsFolder: "drizzle" });
   console.log("Database migrations applied.");
 } finally {
-  client.close();
+  await client.end();
 }
