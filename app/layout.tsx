@@ -2,6 +2,10 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  applicationName: "Gonza Brands",
+  authors: [{ name: "Gonza Brands", url: "https://gonzabrands.com" }],
+  creator: "Gonza Brands",
+  publisher: "Gonza Brands",
   title: "Gonza Brands | Better brands, built together",
   description: "Connect with the right graphic designer, share your brief, and bring your brand to life.",
   icons: {
