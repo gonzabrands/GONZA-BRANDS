@@ -6,6 +6,7 @@ type Row = Record<string, unknown>;
 const now = () => new Date().toISOString();
 const id = () => crypto.randomUUID();
 const clean = (v: unknown, max = 4000) => String(v ?? "").trim().slice(0, max);
+const url = (v: unknown) => { const value=clean(v,500); if(!value) return ""; try { const parsed=new URL(value); return ["http:","https:"].includes(parsed.protocol)?parsed.toString():""; } catch { return ""; } };
 const num = (v: unknown) => Number(v) || 0;
 const db = () => { if (!env.DB) throw new Error("Database unavailable."); return env.DB; };
 const query = async (sql: string, ...args: unknown[]): Promise<Row[]> =>
@@ -60,19 +61,19 @@ export async function POST(request: Request) {
   const userId = auth.userId;
   if (action === "profile") {
     await run("UPDATE users SET name=?,title=?,bio=?,location=?,website=?,skills=?,services=?,experience=?,starting_price=?,industry=?,phone=?,open_to_proposals=? WHERE id=?",
-      clean(data.name,100), clean(data.title,100), clean(data.bio,1500), clean(data.location,100), clean(data.website,300), clean(data.skills,500), clean(data.services,500), Math.max(0,num(data.experience)), Math.max(0,num(data.startingPrice)), clean(data.industry,100), clean(data.phone,100), data.openToProposals ? 1 : 0, userId);
+      clean(data.name,100), clean(data.title,100), clean(data.bio,1500), clean(data.location,100), url(data.website), clean(data.skills,500), clean(data.services,500), Math.max(0,num(data.experience)), Math.max(0,num(data.startingPrice)), clean(data.industry,100), clean(data.phone,100), data.openToProposals ? 1 : 0, userId);
     return response({ ok: true });
   }
   if (action === "portfolioAdd" && role === "designer") {
     if (!clean(data.title)) return error("Add a project title.");
-    await run("INSERT INTO portfolio (id,designer_id,title,description,image,services,client,created_at) VALUES (?,?,?,?,?,?,?,?)", id(),userId,clean(data.title,100),clean(data.description,1000),clean(data.image,500),clean(data.services,300),clean(data.client,100),now());
+    await run("INSERT INTO portfolio (id,designer_id,title,description,image,services,client,created_at) VALUES (?,?,?,?,?,?,?,?)", id(),userId,clean(data.title,100),clean(data.description,1000),url(data.image),clean(data.services,300),clean(data.client,100),now());
     return response({ ok:true });
   }
   if (action === "portfolioEdit" && role === "designer") {
     if (!clean(data.title)) return error("Add a project title.");
     const item=await one("SELECT id FROM portfolio WHERE id=? AND designer_id=?",clean(data.id),userId);
     if (!item) return error("Portfolio item not found.",404);
-    await run("UPDATE portfolio SET title=?,description=?,image=?,services=?,client=? WHERE id=?",clean(data.title,100),clean(data.description,1000),clean(data.image,500),clean(data.services,300),clean(data.client,100),item.id);
+    await run("UPDATE portfolio SET title=?,description=?,image=?,services=?,client=? WHERE id=?",clean(data.title,100),clean(data.description,1000),url(data.image),clean(data.services,300),clean(data.client,100),item.id);
     return response({ok:true});
   }
   if (action === "portfolioDelete" && role === "designer") {
@@ -82,7 +83,7 @@ export async function POST(request: Request) {
   if (action === "jobAdd" && role === "business") {
     const title=clean(data.title,120), description=clean(data.description,3000), budget=num(data.budget), deadline=clean(data.deadline,30);
     if (title.length<5 || description.length<20 || budget<=0 || !deadline) return error("Add a title, clear brief, budget and deadline.");
-    await run("INSERT INTO jobs (id,business_id,title,description,service,skills,budget,deadline,attachment,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",id(),userId,title,description,clean(data.service,100),clean(data.skills,300),budget,deadline,clean(data.attachment,500),"Open",now());
+    await run("INSERT INTO jobs (id,business_id,title,description,service,skills,budget,deadline,attachment,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",id(),userId,title,description,clean(data.service,100),clean(data.skills,300),budget,deadline,url(data.attachment),"Open",now());
     return response({ ok:true });
   }
   if (action === "jobStatus" && role === "business") {
@@ -99,7 +100,7 @@ export async function POST(request: Request) {
     if (await one("SELECT id FROM proposals WHERE job_id=? AND designer_id=?",job.id,userId)) return error("You already proposed on this job.");
     const amount=num(data.amount), days=num(data.deliveryDays), message=clean(data.message,2000);
     if (amount<=0 || days<=0 || message.length<20) return error("Add an amount, delivery time and a detailed message.");
-    await run("INSERT INTO proposals (id,job_id,designer_id,amount,delivery_days,message,attachment,created_at) VALUES (?,?,?,?,?,?,?,?)",id(),job.id,userId,amount,days,message,clean(data.attachment,500),now());
+    await run("INSERT INTO proposals (id,job_id,designer_id,amount,delivery_days,message,attachment,created_at) VALUES (?,?,?,?,?,?,?,?)",id(),job.id,userId,amount,days,message,url(data.attachment),now());
     await run("UPDATE jobs SET status='Reviewing Proposals' WHERE id=?",job.id);
     await run("INSERT INTO messages (id,sender_id,recipient_id,job_id,body,created_at) VALUES (?,?,?,?,?,?)",id(),userId,job.business_id,job.id,`Proposal for ${job.title}: ${message}`,now());
     await notify(String(job.business_id),`${me.name} sent a proposal for ${job.title}.`);
@@ -130,18 +131,34 @@ export async function POST(request: Request) {
     await run("UPDATE proposals SET status='Withdrawn' WHERE id=? AND designer_id=? AND status IN ('Submitted','Viewed')",clean(data.id),userId);
     return response({ok:true});
   }
+  if (action === "directProposal" && role === "designer") {
+    const business=await one("SELECT id,name,open_to_proposals FROM users WHERE id=? AND role='business'",clean(data.businessId));
+    if (!business || Number(business.open_to_proposals)!==1) return error("This business is not open to direct proposals.",403);
+    const amount=num(data.amount), days=num(data.deliveryDays), service=clean(data.service,100), pitch=clean(data.message,2000);
+    if (amount<=0 || days<=0 || !service || pitch.length<20) return error("Add a service, quotation, delivery time and detailed message.");
+    const weekAgo=new Date(Date.now()-7*86400000).toISOString();
+    const recent=await one("SELECT id FROM messages WHERE sender_id=? AND recipient_id=? AND body LIKE 'Direct proposal:%' AND created_at>?",userId,business.id,weekAgo);
+    if (recent) return error("You have already sent this business a proposal this week.");
+    const dayAgo=new Date(Date.now()-86400000).toISOString();
+    const daily=await one("SELECT COUNT(*) count FROM messages WHERE sender_id=? AND body LIKE 'Direct proposal:%' AND created_at>?",userId,dayAgo);
+    if (Number(daily?.count||0)>=3) return error("You can send up to three direct proposals per day.");
+    const body=`Direct proposal: ${service}\nQuotation: UGX ${amount.toLocaleString("en-UG")}\nDelivery: ${days} days\n\n${pitch}`;
+    await run("INSERT INTO messages (id,sender_id,recipient_id,body,attachment,created_at) VALUES (?,?,?,?,?,?)",id(),userId,business.id,body,url(data.attachment),now());
+    await notify(String(business.id),`${me.name} sent you a direct service proposal.`);
+    return response({ok:true});
+  }
   if (action === "message") {
     const other=await one("SELECT * FROM users WHERE id=? AND role<>?",clean(data.recipientId),role);
     if (!other) return error("Recipient not found.",404);
     const body=clean(data.body,4000);
-    if (!body && !clean(data.attachment)) return error("Write a message.");
+    if (!body && !url(data.attachment)) return error("Write a message.");
     const connected=role==="business" || !!(await one("SELECT p.id FROM proposals p JOIN jobs j ON j.id=p.job_id WHERE p.designer_id=? AND j.business_id=? UNION SELECT id FROM projects WHERE designer_id=? AND business_id=?",userId,other.id,userId,other.id));
     const replies=await one("SELECT id FROM messages WHERE sender_id=? AND recipient_id=? LIMIT 1",other.id,userId);
     const prior=await one("SELECT id FROM messages WHERE sender_id=? AND recipient_id=? LIMIT 1",userId,other.id);
     const daily=await one("SELECT COUNT(*) count FROM messages WHERE sender_id=? AND created_at>? AND recipient_id IN (SELECT id FROM users WHERE role='business')",userId,new Date(Date.now()-86400000).toISOString());
     const permitted=connected || (Number(other.open_to_proposals)===1 && (!!replies || (!prior && Number(daily?.count||0)<3)));
     if (!permitted) return error("You can message this business after proposing on a job or if it accepts direct proposals.",403);
-    await run("INSERT INTO messages (id,sender_id,recipient_id,body,attachment,created_at) VALUES (?,?,?,?,?,?)",id(),userId,other.id,body,clean(data.attachment,500),now());
+    await run("INSERT INTO messages (id,sender_id,recipient_id,body,attachment,created_at) VALUES (?,?,?,?,?,?)",id(),userId,other.id,body,url(data.attachment),now());
     await notify(String(other.id),`New message from ${me.name}.`);
     return response({ok:true});
   }
