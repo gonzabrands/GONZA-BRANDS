@@ -1,4 +1,4 @@
-import { getChatGPTUser, chatGPTSignInPath, chatGPTSignOutPath } from "./chatgpt-auth";
+import { getChatGPTUser, chatGPTSignOutPath } from "./chatgpt-auth";
 import Workspace from "./workspace";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export default async function Home() {
           <span className="eyebrow">THE CREATIVE CONNECTION</span>
           <h1>Great brands begin with the right people.</h1>
           <p>A focused space where businesses find talented graphic designers, share briefs and build something worth remembering.</p>
-          <a className="button primary large" href={chatGPTSignInPath("/")} target="_top">Get started <span>↗</span></a>
+          <a className="button primary large" href="/join">Get started <span>↗</span></a>
         </div>
         <div className="welcome-art">
           <div className="art-card art-one"><span>01 / DISCOVER</span><strong>Find your creative match</strong><div className="art-avatar-row"><i/><i/><i/></div></div>
