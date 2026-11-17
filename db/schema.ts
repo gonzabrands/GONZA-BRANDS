@@ -13,6 +13,11 @@ export const users = sqliteTable("users", {
   createdAt: text("created_at").notNull(),
 });
 
+export const legacyGoogleAccounts = sqliteTable("legacy_google_accounts", {
+  accountId: text("account_id").primaryKey(),
+  userId: text("user_id").notNull().unique().references(() => users.id),
+});
+
 export const jobs = sqliteTable("jobs", {
   id: text("id").primaryKey(), businessId: text("business_id").notNull().references(() => users.id),
   title: text("title").notNull(), description: text("description").notNull(),

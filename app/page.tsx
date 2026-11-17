@@ -1,11 +1,11 @@
-import { getChatGPTUser, chatGPTSignOutPath } from "./chatgpt-auth";
+import { getSignedInUser } from "@/lib/current-user";
 import Workspace from "./workspace";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const user = await getChatGPTUser();
-  if (user) return <Workspace signOutPath={chatGPTSignOutPath("/")} />;
+  const user = await getSignedInUser();
+  if (user) return <Workspace />;
   return (
     <main className="welcome">
       <div className="welcome-inner">

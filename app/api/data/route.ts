@@ -1,19 +1,19 @@
-import { env } from "cloudflare:workers";
-import { getChatGPTUser } from "../../chatgpt-auth";
+import type { InValue } from "@libsql/client";
+import { getSignedInUser } from "@/lib/current-user";
+import { getDb } from "@/db";
 
 export const dynamic = "force-dynamic";
-type Row = Record<string, unknown>;
+export const runtime = "nodejs";
 const now = () => new Date().toISOString();
 const id = () => crypto.randomUUID();
 const clean = (v: unknown, max = 4000) => String(v ?? "").trim().slice(0, max);
 const url = (v: unknown) => { const value=clean(v,500); if(!value) return ""; try { const parsed=new URL(value); return ["http:","https:"].includes(parsed.protocol)?parsed.toString():""; } catch { return ""; } };
 const num = (v: unknown) => Number(v) || 0;
-const db = () => { if (!env.DB) throw new Error("Database unavailable."); return env.DB; };
-const query = async (sql: string, ...args: unknown[]): Promise<Row[]> =>
-  (await db().prepare(sql).bind(...args).all()).results as Row[];
-const one = async (sql: string, ...args: unknown[]) => (await query(sql, ...args))[0];
-const run = async (sql: string, ...args: unknown[]) => db().prepare(sql).bind(...args).run();
-const response = (data: unknown, status = 200) => Response.json(data, { status });
+const run = (sql: string, ...args: InValue[]) => getDb().execute({ sql, args });
+const query = async (sql: string, ...args: InValue[]) => (await run(sql, ...args)).rows;
+const one = async (sql: string, ...args: InValue[]) => (await query(sql, ...args))[0];
+const response = (data: unknown, status = 200) =>
+  Response.json(data, { status, headers: { "Cache-Control": "private, no-store" } });
 const error = (message: string, status = 400) => response({ error: message }, status);
 
 async function notify(userId: string, body: string) {
@@ -21,7 +21,7 @@ async function notify(userId: string, body: string) {
 }
 
 export async function GET() {
-  const auth = await getChatGPTUser();
+  const auth = await getSignedInUser();
   if (!auth) return error("Please sign in.", 401);
   const me = await one("SELECT * FROM users WHERE id=?", auth.userId);
   if (!me) return response({ me: null });
@@ -41,10 +41,14 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const auth = await getChatGPTUser();
+  const auth = await getSignedInUser();
   if (!auth) return error("Please sign in.", 401);
-  let data: Record<string, unknown>;
-  try { data = await request.json() as Record<string, unknown>; } catch { return error("Invalid request."); }
+  const mediaType = request.headers.get("content-type")?.split(";")[0].trim().toLowerCase();
+  if (mediaType !== "application/json") return error("Send JSON data.", 415);
+  let body: unknown;
+  try { body = await request.json(); } catch { return error("Invalid request."); }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return error("Invalid request.");
+  const data = body as Record<string, unknown>;
   const action = clean(data.action, 40);
   const me = await one("SELECT * FROM users WHERE id=?", auth.userId);
   if (action === "register") {
@@ -53,7 +57,8 @@ export async function POST(request: Request) {
     if (role !== "designer" && role !== "business") return error("Choose a role.");
     const name = clean(data.name, 100);
     if (name.length < 2) return error("Enter your name or business name.");
-    await run("INSERT INTO users (id,email,role,name,created_at) VALUES (?,?,?,?,?)", auth.userId, auth.email, role, name, now());
+    const result = await run("INSERT INTO users (id,email,role,name,created_at) VALUES (?,?,?,?,?) ON CONFLICT(id) DO NOTHING", auth.userId, auth.email, role, name, now());
+    if (!result.rowsAffected) return error("Account already exists.", 409);
     return response({ ok: true });
   }
   if (!me) return error("Create your account first.", 403);

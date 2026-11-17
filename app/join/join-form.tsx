@@ -3,15 +3,15 @@
 import { useState } from "react";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
+import { continueWithGoogle } from "../auth-actions";
 
 type Role = "designer" | "business";
 
-export default function JoinForm({ initialRole, signedIn, suggestedName, designerSignInPath, businessSignInPath }: {
+export default function JoinForm({ initialRole, signedIn, suggestedName, canSignIn }: {
   initialRole: Role | null;
   signedIn: boolean;
   suggestedName: string;
-  designerSignInPath: string;
-  businessSignInPath: string;
+  canSignIn: boolean;
 }) {
   const [role, setRole] = useState<Role | null>(initialRole);
   const [name, setName] = useState(suggestedName);
@@ -57,8 +57,11 @@ export default function JoinForm({ initialRole, signedIn, suggestedName, designe
         <label className="field"><span>{role === "designer" ? "Your full name" : "Business or customer name"}</span><input value={name} onChange={event => setName(event.target.value)} placeholder={role === "designer" ? "e.g. Sarah Namara" : "e.g. Kira Coffee Co."} required minLength={2}/></label>
         {error && <p className="form-notice" role="alert">{error}</p>}
         <button className="button primary wide" disabled={!role || busy}>{busy ? "Creating workspace…" : "Create my workspace"} <ArrowRight size={17}/></button>
-      </form> : role ? <a className="button primary wide" href={role === "designer" ? designerSignInPath : businessSignInPath} target="_top">Continue as {role === "designer" ? "a designer" : "a business / customer"} <ArrowRight size={17}/></a> : <button className="button primary wide" disabled>Choose a role to continue <ArrowRight size={17}/></button>}
-      {!signedIn && <p className="join-hint">Next, you’ll sign in securely and finish your profile.</p>}
+      </form> : <form action={continueWithGoogle}>
+        <input type="hidden" name="role" value={role ?? ""} />
+        <button className="button primary wide" disabled={!role || !canSignIn}>Continue with Google <ArrowRight size={17}/></button>
+      </form>}
+      {!signedIn && <p className="join-hint">{canSignIn ? "Choose a role, then sign in to finish your profile." : "Sign-in is temporarily unavailable."}</p>}
     </div>
     <p className="onboard-foot">A better way to make great work together.</p>
   </main>;
